@@ -6,3 +6,29 @@
 4. Initialize Groq client     -----> const client = new Groq();
 5. Generate response          -----> client.chat.completions.create, max_tokens, message, model
 6. Print AI response          -----> message
+
+
+/* ------------------------------------------------------ Anthropic SDK or Groq SDK (stream response)  ------------------------------------------------------ */
+
+1. What are the different streaming events?
+Anthropic sends several types of events:
+
+Event type	            |    What it means
+                        |
+1. message_start	    |   -> A new message is starting
+2. content_block_start	|   -> A new content block is starting
+3. content_block_delta	|   -> A content block has received new data
+4. content_block_stop	|   -> A content block has finished
+5. message_delta	    |   -> Message-level metadata has been updated
+6. message_stop	        |   -> The entire message has finished
+7. ping	                |   -> Keep-alive event
+8. error	            |   -> An error occurred
+
+
+
+Delta type	                    Purpose
+
+1. text_delta	                   Newly generated text
+2. input_json_delta	               Partial JSON input for a tool
+3. thinking_delta	               Thinking content, when applicable
+4. signature_delta	               Signature data for certain thinking blocks

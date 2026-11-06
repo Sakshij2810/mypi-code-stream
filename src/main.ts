@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 
 // import Anthropic from "@anthropic-ai/sdk";
 
+// // 1. Load environment variables
 // /* load the .env next to the code, so mypi works from any folder
 
 //  1. import.meta.url :  tells us where the current file is located, not where we executed the terminal command.
@@ -40,6 +41,7 @@ import { parseArgs } from "node:util";
 //   quiet: true,
 // });
 
+// // 2. Parse CLI arguments
 // /* parseArgs() :  is a built-in Node.js utility that helps us read command-line arguments passed by the user. */
 // const { values } = parseArgs({
 //   options: {
@@ -48,23 +50,46 @@ import { parseArgs } from "node:util";
 //   },
 // });
 
+// // 3. Validate prompt
 // if (!values.prompt) {
 //   console.error("No prompt found");
 //   process.exit(1);
 // }
 
+// // 4. Initialize Anthropic client
 // /*
 // When you create an Anthropic client without passing configuration, the SDK automatically looks for an environment variable named: ANTHROPIC_API_KEY
 // */
 // const client = new Anthropic();
 
-// const message = await client.messages.create({
+// // // 5.1. Generate response - without stream
+// // const message = await client.messages.create({
+// //   max_tokens: 1024,
+// //   messages: [{ content: values.prompt, role: "user" }],
+// //   model: values.model,
+// // });
+
+// // 6.1 : print AI response
+// console.log(message);
+
+// // 5.2. Generate response - using stream
+// const stream = client.messages.stream({
 //   max_tokens: 1024,
 //   messages: [{ content: values.prompt, role: "user" }],
 //   model: values.model,
 // });
 
-// console.log(message);
+// // 6.2 loop over all events present in stream and print AI response
+// for await (const event of stream) {
+//   // process.stdout.write(event.type);
+
+//   if (
+//     event.type === "content_block_delta" &&
+//     event.delta.type === "text_delta"
+//   ) {
+//     process.stdout.write(event.delta.text);
+//   }
+// }
 
 /* ------------------------------------------------------ Groq SDK : code ------------------------------------------------------ */
 
@@ -80,10 +105,7 @@ config({
 const { values } = parseArgs({
   options: {
     prompt: { type: "string", short: "p" },
-    model: { type: "string", default: "openai/gpt-oss-120b" },
-
-    // model: { type: "string", default: "llama-3.3-70b-versatile" }, // deprecated
-    // model: { type: "string", default: "qwen/qwen3.6-27b" }, // deprecated
+    model: { type: "string", default: "openai/gpt-oss-120b" }, // llama-3.3-70b-versatile | qwen/qwen3.6-27b"  are deprecated
   },
 });
 
@@ -96,18 +118,41 @@ if (!values.prompt) {
 // 4. Initialize Groq client
 const client = new Groq();
 
-// 5. Generate response
-const message = await client.chat.completions.create({
+// // 5.1. Generate response - without stream
+// const message = await client.chat.completions.create({
+//   max_tokens: 1024,
+//   messages: [
+//     {
+//       content: values.prompt,
+//       role: "user",
+//     },
+//   ],
+//   model: values.model,
+// });
+
+// // 6.1 Print AI response
+// console.log(message.choices[0].message.content);
+// console.log(message);
+
+// 5.2. Generate response - using stream
+const stream = await client.chat.completions.create({
   max_tokens: 1024,
-  messages: [
-    {
-      content: values.prompt,
-      role: "user",
-    },
-  ],
+  messages: [{ content: values.prompt, role: "user" }],
   model: values.model,
+  stream: true,
 });
 
-// 6. Print AI response
-console.log(message.choices[0].message.content);
-console.log(message);
+// 6.2 loop over all chunks present in stream and print AI response
+for await (const chunk of stream) {
+  const content = chunk.choices[0]?.delta?.content || "";
+
+  process.stdout.write(content);
+}
+
+/*
+- console.log() → Print something and move to the next line.
+- process.stdout.write() → Print something exactly where the cursor currently is.
+
+Interview takeaway: We use process.stdout.write() in LLM streaming because the API sends response chunks incrementally, 
+and we want to concatenate those chunks directly in the terminal without introducing unwanted line breaks.
+ */
