@@ -10,4 +10,6 @@ run "npm i"
 run "npm link" --> (Registers your local CLI globally : "mypi")
 
 
+------------------------------- useful commands -----------------------
 
+1. npx tsx notes/code/index.ts -> run index.ts file inside notes/code folder
