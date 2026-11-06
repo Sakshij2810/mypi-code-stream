@@ -1,0 +1,13 @@
+get follwoing files from : https://github.com/mr-raj12/stream-mypi/
+
+1. .gitattributes
+2. .gitignore
+3. package-lock.json
+4. package.json
+5. tsconfig.json 
+
+run "npm i" 
+run "npm link" --> (Registers your local CLI globally : "mypi")
+
+
+

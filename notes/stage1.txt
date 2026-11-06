@@ -1,0 +1,8 @@
+/* ------------------------------------------------------ Anthropic SDK or Groq SDK (client setup steps)  ------------------------------------------------------ */
+
+1. Load environment variables -----> config, fileURLToPath, new URL , import.meta.url
+2. Parse CLI arguments        -----> parseArgs, options
+3. Validate prompt            -----> process.exit(1)
+4. Initialize Groq client     -----> const client = new Groq();
+5. Generate response          -----> client.chat.completions.create, max_tokens, message, model
+6. Print AI response          -----> message
