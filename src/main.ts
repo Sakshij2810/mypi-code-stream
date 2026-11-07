@@ -7,6 +7,8 @@ import { AssistantMessage, Message } from "./types.ts";
 import Anthropic from "@anthropic-ai/sdk";
 import Groq from "groq-sdk";
 import { readTool } from "./tools/read.ts";
+import { runAgent } from "./agent/loop.ts";
+import { tools } from "./tools/index.ts";
 
 // /* load the .env next to the code, so mypi works from any folder
 
@@ -184,46 +186,68 @@ const messages: Message[] = [{ role: "user", content: values.prompt }];
 
 /* ------------------------------------------------------ stage 3 -> Tools + OpenAI compat : Multi providers functionality ------------------------------------------------------ */
 
-const tools = [readTool];
+// const tools = [readTool];
 
-async function callModel(): Promise<AssistantMessage> {
-  for await (const event of provider.stream({ messages, model, tools })) {
-    if (event.type === "text_delta") {
-      process.stdout.write(event.delta);
-    } else {
+// async function callModel(): Promise<AssistantMessage> {
+//   for await (const event of provider.stream({ messages, model, tools })) {
+//     if (event.type === "text_delta") {
+//       process.stdout.write(event.delta);
+//     } else {
+//       const { usage, stopReason } = event.message;
+
+//       console.log(
+//         `\n\n ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
+//       );
+
+//       return event.message;
+//     }
+//   }
+
+//   throw new Error("Stream ended without a done event.");
+// }
+
+// const first = await callModel();
+// messages.push(first);
+// // console.log(`#################### ${first.stopReason}`);
+
+// if (first.stopReason === "toolUse") {
+//   for (const block of first.content) {
+//     if (block.type !== "toolCall") continue;
+//     console.log(`-> ${block.name} (${JSON.stringify(block.arguments)})`);
+
+//     const result = await readTool.execute(block.arguments);
+
+//     messages.push({
+//       role: "toolResult",
+//       content: result,
+//       toolCallId: block.id,
+//       toolName: block.name,
+//       isError: false,
+//     });
+
+//     // round 2: the model sees the tool result and answers
+//     messages.push(await callModel());
+//   }
+// }
+
+/* ------------------------------------------------------ stage 4 -> Run Agent Loop with Tools ------------------------------------------------------ */
+
+await runAgent({
+  provider,
+  model,
+  tools,
+  messages,
+  onEvent(event) {
+    if (event.type === "text") process.stdout.write(event.delta);
+    else if (event.type === "tool_start") console.log(`\n ${event.call.name}`);
+    else if (event.type === "tool_end") {
+      const lines = event.result.split("\n").length;
+      console.log(`\n ${event.isError ? event.result : lines}`);
+    } else if (event.type === "turn_end") {
       const { usage, stopReason } = event.message;
-
       console.log(
-        `\n\n ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
+        `\n\n  ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
       );
-
-      return event.message;
     }
-  }
-
-  throw new Error("Stream ended without a done event.");
-}
-
-const first = await callModel();
-messages.push(first);
-// console.log(`#################### ${first.stopReason}`);
-
-if (first.stopReason === "toolUse") {
-  for (const block of first.content) {
-    if (block.type !== "toolCall") continue;
-    console.log(`-> ${block.name} (${JSON.stringify(block.arguments)})`);
-
-    const result = await readTool.execute(block.arguments);
-
-    messages.push({
-      role: "toolResult",
-      content: result,
-      toolCallId: block.id,
-      toolName: block.name,
-      isError: false,
-    });
-
-    // round 2: the model sees the tool result and answers
-    messages.push(await callModel());
-  }
-}
+  },
+});
