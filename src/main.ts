@@ -2,13 +2,12 @@ import { config } from "dotenv";
 import { fileURLToPath } from "node:url"; // It converts a file URL into a normal filesystem path
 import { parseArgs } from "node:util";
 import { getProvider } from "./providers/index.ts";
-import { Message } from "./types.ts";
+import { AssistantMessage, Message } from "./types.ts";
 
-/* ------------------------------------------------------ stage 1 -> Anthropic SDK : code ------------------------------------------------------ */
+import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
+import { readTool } from "./tools/read.ts";
 
-// import Anthropic from "@anthropic-ai/sdk";
-
-// // 1. Load environment variables
 // /* load the .env next to the code, so mypi works from any folder
 
 //  1. import.meta.url :  tells us where the current file is located, not where we executed the terminal command.
@@ -38,26 +37,60 @@ import { Message } from "./types.ts";
 
 // 4. quite : Suppresses dotenv's informational logging. It doesn't suppress errors from your application or make environment variables private.
 // */
-// config({
-//   path: fileURLToPath(new URL("../.env", import.meta.url)),
-//   quiet: true,
-// });
 
-// // 2. Parse CLI arguments
-// /* parseArgs() :  is a built-in Node.js utility that helps us read command-line arguments passed by the user. */
-// const { values } = parseArgs({
-//   options: {
-//     prompt: { type: "string", short: "p" },
-//     model: { type: "string", default: "claude-sonnet-5" },
-//   },
-// });
+// 1. Load environment variables
+config({
+  path: fileURLToPath(new URL("../.env", import.meta.url)),
+  quiet: true,
+});
 
-// // 3. Validate prompt
-// if (!values.prompt) {
-//   console.error("No prompt found");
-//   process.exit(1);
-// }
+// 2. Parse CLI arguments
+/* parseArgs() :  is a built-in Node.js utility that helps us read command-line arguments passed by the user. */
 
+// stage 1 -> Anthropic SDK parseArgs
+/*
+const { values } = parseArgs({
+  options: {
+    prompt: { type: "string", short: "p" },
+    model: { type: "string", default: "claude-sonnet-5" },
+  },
+});
+ */
+
+// stage 1 -> Groq SDK parseArgs
+/*
+const { values } = parseArgs({
+  options: {
+    prompt: { type: "string", short: "p" },
+    model: { type: "string", default: "openai/gpt-oss-120b" }, // llama-3.3-70b-versatile | qwen/qwen3.6-27b"  are deprecated
+  },
+});
+ */
+
+// stage 2+ -> parseArgs
+const { values } = parseArgs({
+  options: {
+    prompt: { type: "string", short: "p" },
+    provider: { type: "string", default: "groq" },
+    model: { type: "string" },
+  },
+});
+
+// 3. Validate prompt
+if (!values.prompt) {
+  console.error(
+    `Prompt is missing, expected command ->  mypi -p "prompt" --provider antropic OR groq`,
+  );
+  process.exit(1);
+}
+
+// only for stage 2+ ->
+// 4. Use providers to Initialize Groq client & Generating response
+const provider = getProvider(values.provider);
+const model = values.model ?? provider.defaultModel;
+const messages: Message[] = [{ role: "user", content: values.prompt }];
+
+/* ------------------------------------------------------ stage 1 -> Anthropic SDK : code ------------------------------------------------------ */
 // // 4. Initialize Anthropic client
 // /*
 // When you create an Anthropic client without passing configuration, the SDK automatically looks for an environment variable named: ANTHROPIC_API_KEY
@@ -94,29 +127,6 @@ import { Message } from "./types.ts";
 // }
 
 /* ------------------------------------------------------ stage 1 -> Groq SDK : code ------------------------------------------------------ */
-
-// import Groq from "groq-sdk";
-
-// // 1. Load environment variables
-// config({
-//   path: fileURLToPath(new URL("../.env", import.meta.url)),
-//   quiet: true,
-// });
-
-// // 2. Parse CLI arguments
-// const { values } = parseArgs({
-//   options: {
-//     prompt: { type: "string", short: "p" },
-//     model: { type: "string", default: "openai/gpt-oss-120b" }, // llama-3.3-70b-versatile | qwen/qwen3.6-27b"  are deprecated
-//   },
-// });
-
-// // 3. Validate prompt
-// if (!values.prompt) {
-//   console.error("No prompt found");
-//   process.exit(1);
-// }
-
 // // 4. Initialize Groq client
 // const client = new Groq();
 
@@ -160,43 +170,60 @@ import { Message } from "./types.ts";
 //  */
 
 /* ------------------------------------------------------ stage 2 -> OpenAI compat : Multi providers functionality ------------------------------------------------------ */
+// // 6. Print AI response
+// for await (const event of provider.stream({ messages, model })) {
+//   if (event.type === "text_delta") {
+//     process.stdout.write(event.delta);
+//   } else {
+//     const { usage, stopReason } = event.message;
+//     console.log(
+//       `\n\n ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
+//     );
+//   }
+// }
 
-// 1. Load environment variables
-config({
-  path: fileURLToPath(new URL("../.env", import.meta.url)),
-  quiet: true,
-});
+/* ------------------------------------------------------ stage 3 -> Tools + OpenAI compat : Multi providers functionality ------------------------------------------------------ */
 
-// 2. Parse CLI arguments
-const { values } = parseArgs({
-  options: {
-    prompt: { type: "string", short: "p" },
-    provider: { type: "string", default: "groq" },
-    model: { type: "string" },
-  },
-});
+const tools = [readTool];
 
-// 3. Validate prompt
-if (!values.prompt) {
-  console.error(
-    `Prompt is missing, expected command ->  mypi -p "prompt" --provider antropic OR groq`,
-  );
-  process.exit(1);
+async function callModel(): Promise<AssistantMessage> {
+  for await (const event of provider.stream({ messages, model, tools })) {
+    if (event.type === "text_delta") {
+      process.stdout.write(event.delta);
+    } else {
+      const { usage, stopReason } = event.message;
+
+      console.log(
+        `\n\n ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
+      );
+
+      return event.message;
+    }
+  }
+
+  throw new Error("Stream ended without a done event.");
 }
 
-// 4. Use providers to Initialize Groq client & Generating response
-const provider = getProvider(values.provider);
-const model = values.model ?? provider.defaultModel;
-const messages: Message[] = [{ role: "user", content: values.prompt }];
+const first = await callModel();
+messages.push(first);
+// console.log(`#################### ${first.stopReason}`);
 
-// 6. Print AI response
-for await (const event of provider.stream({ messages, model })) {
-  if (event.type === "text_delta") {
-    process.stdout.write(event.delta);
-  } else {
-    const { usage, stopReason } = event.message;
-    console.log(
-      `\n\n ${provider.name} ... ${model} ... ${usage.input} ... ${usage.output} ... ${stopReason}`,
-    );
+if (first.stopReason === "toolUse") {
+  for (const block of first.content) {
+    if (block.type !== "toolCall") continue;
+    console.log(`-> ${block.name} (${JSON.stringify(block.arguments)})`);
+
+    const result = await readTool.execute(block.arguments);
+
+    messages.push({
+      role: "toolResult",
+      content: result,
+      toolCallId: block.id,
+      toolName: block.name,
+      isError: false,
+    });
+
+    // round 2: the model sees the tool result and answers
+    messages.push(await callModel());
   }
 }

@@ -1,3 +1,6 @@
 https://github.com/mr-raj12/stream-mypi/
+
 https://platform.claude.com/docs/en/api/typescript/beta/messages/create
+https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview
+
 https://cogent-one.vercel.app/#stream/allow/6
